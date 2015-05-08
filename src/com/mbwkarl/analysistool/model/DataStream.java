@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -34,12 +35,14 @@ public class DataStream {
     private String xAxisName = "";
     private String yAxisName = "";
     
-    private StreamDataType valueType;
+    private StreamDataType valueType = StreamDataType.UNKNOWN;
     
     private TreeMap<BigDecimal, BigDecimal> datapoints;
     private BigDecimal lowestValue;
     private BigDecimal highestValue;
     private BigDecimal lastValue;
+    
+    private static final BigDecimal TIME_SANITATION_MULTIPLIER = BigDecimal.valueOf(2);
     
     public DataStream(String name, String xName, String yName, StreamDataType yType) {
         dataName = name;
@@ -56,6 +59,51 @@ public class DataStream {
         });
     }
     
+    private BigDecimal getMean(BigDecimal ... values) {
+        BigDecimal aggregate = BigDecimal.ZERO;
+        int valueCount = values.length;
+        for (int i = 0; i < valueCount; ++i) {
+            aggregate = aggregate.add(values[i]);
+        }
+        
+        BigDecimal mean = aggregate.divide(BigDecimal.valueOf(valueCount), 10, RoundingMode.HALF_UP);
+        
+        return mean;
+    }
+    
+    private boolean sanitizeTimes() {
+        boolean runAgain = true;
+        
+        Set<BigDecimal> set = datapoints.keySet();
+        BigDecimal[] times = new BigDecimal[set.size()];
+        set.toArray(times);
+        
+        BigDecimal timeMean = getMean(times);
+        
+        BigDecimal timeMeanDiffHigh = getHighestKey().subtract(timeMean);
+        BigDecimal timeMeanDiffLow = timeMean.subtract(getLowestKey());
+        
+        BigDecimal timeMeanDiffDiff = timeMeanDiffHigh.subtract(timeMeanDiffLow);
+        
+        if (timeMeanDiffHigh.compareTo( timeMeanDiffLow.multiply(TIME_SANITATION_MULTIPLIER) ) > 0) {
+            datapoints.remove(getHighestKey());
+        } else if (timeMeanDiffLow.compareTo( timeMeanDiffHigh.multiply(TIME_SANITATION_MULTIPLIER) ) > 0) {
+            datapoints.remove(getLowestKey());
+        } else {
+            runAgain = false;
+        }
+        
+        return runAgain;
+    }
+    
+    private void sanitizeTree() {
+        int timeSanitations = 0;
+        while (sanitizeTimes()) {
+            ++timeSanitations;
+        }
+        System.err.printf("removed %d erroneous times\n", timeSanitations);
+    }
+    
     private boolean failSanity() {
         System.err.println("sanity check failed");
         return false;
@@ -63,11 +111,12 @@ public class DataStream {
     
     private boolean passSanityCheck(BigDecimal value) {
         if (!datapoints.isEmpty()) {
-            BigDecimal diff = value.subtract(lastValue);
-            diff = diff.compareTo(BigDecimal.ZERO) < 0 ? diff.negate() : diff;
-            if (diff.compareTo(BigDecimal.valueOf(1000)) > 0) {
-                return failSanity();
-            }
+//            BigDecimal diff = value.subtract(lastValue);
+//            diff = diff.compareTo(BigDecimal.ZERO) < 0 ? diff.negate() : diff;
+//            if (diff.compareTo(BigDecimal.valueOf(1000)) > 0) {
+//                return failSanity();
+//            }
+            //sanitizeTree();
         }
         
         if (getType() == StreamDataType.LATLON) {
@@ -132,16 +181,16 @@ public class DataStream {
         return addDataPoint(BigDecimal.valueOf(time), BigDecimal.valueOf(value));
     }
     
-    private BigDecimal getMidValue(BigDecimal mykey, BigDecimal lokey, BigDecimal hikey, BigDecimal loval, BigDecimal hival) {
-        BigDecimal lotomy = mykey.subtract(lokey);
-        BigDecimal lotohi = hikey.subtract(lokey);
+    private BigDecimal getMidValue(BigDecimal lookupKey, BigDecimal lowKey, BigDecimal highKey, BigDecimal lowValue, BigDecimal highValue) {
+        BigDecimal lowToMy = lookupKey.subtract(lowKey);
+        BigDecimal lowToHigh = highKey.subtract(lowKey);
         
-        BigDecimal ratio = lotomy.divide(lotohi, 2, RoundingMode.HALF_UP);
+        BigDecimal ratio = lowToMy.divide(lowToHigh, 2, RoundingMode.HALF_UP);
         
-        BigDecimal valDiff = hival.subtract(loval);
-        BigDecimal ratioValDiff = valDiff.multiply(ratio);
+        BigDecimal valueDiff = highValue.subtract(lowValue);
+        BigDecimal ratioValueDiff = valueDiff.multiply(ratio);
         
-        return loval.add(ratioValDiff);
+        return lowValue.add(ratioValueDiff);
     }
     
     /**

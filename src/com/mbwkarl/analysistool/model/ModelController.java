@@ -15,6 +15,8 @@
  */
 package com.mbwkarl.analysistool.model;
 
+import java.io.File;
+
 /**
  *
  * @author Karl Birch
@@ -34,14 +36,7 @@ public class ModelController {
             return;
         }
         
-//        CodeSource codeSource = com.mbwkarl.analysistool.AnalysisTool.class.getProtectionDomain().getCodeSource();
-//        File jarFile = new File(codeSource.getLocation().toURI().getPath());
-//        String jarDir = jarFile.getParentFile().getPath();
-//        
-//        File programDir = new File(jarDir);
-//        programDir;
-        
-        String newLogFileDirName = System.getProperty("user.home") + "/AnalysisToolLogFiles/";
+        String newLogFileDirName = System.getProperty("user.home") + File.separator + "AnalysisToolLogFiles" + File.separator;
         
         java.io.File newLogFileDir = new java.io.File(newLogFileDirName);
         newLogFileDir.mkdir();
